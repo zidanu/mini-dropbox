@@ -2,6 +2,7 @@ package hash
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -19,6 +20,5 @@ func ComputeFileHash(filepath string) (string, error) {
 		return "", fmt.Errorf("failed to hash file: %w", err)
 	}
 
-	checksum := hasher.Sum(nil)
-	return string(checksum), nil
+	return hex.EncodeToString(hasher.Sum(nil)), nil
 }
