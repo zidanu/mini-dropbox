@@ -4,25 +4,26 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
-type event struct {
-	eventType fsnotify.Event
-	hash      string
-	isDir     bool
-}
+type SyncState int
 
-type eventQueue struct {
-	queue []*event
-	size  int
-}
+const (
+	Synced SyncState = iota
+	Pending
+	Uploading
+	Deleted
+)
 
-func (eq *eventQueue) enqueue(e *event) {
-	eq.queue = append(eq.queue, e)
-	eq.size++
-}
+type Direction int
 
-func (eq *eventQueue) dequeue() *event {
-	returnEvent := eq.queue[0]
-	eq.queue = eq.queue[1:]
-	eq.size--
-	return returnEvent
+const (
+	Upload Direction = iota
+	Download
+)
+
+type SyncOp struct {
+	EventType fsnotify.Op
+	Status    SyncState
+	Direction Direction
+	Retries   int
+	Error     error
 }
