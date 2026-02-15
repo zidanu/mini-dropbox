@@ -2,6 +2,7 @@ package sync
 
 import (
 	"github.com/fsnotify/fsnotify"
+	"github.com/zidanu/mini-dropbox/internal/metadata"
 )
 
 type SyncState int
@@ -21,6 +22,7 @@ const (
 )
 
 type SyncOp struct {
+	File      *metadata.File
 	EventType fsnotify.Op
 	Status    SyncState
 	Direction Direction
