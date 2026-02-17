@@ -15,4 +15,16 @@ type File struct {
 	Version      int
 	RemoteHash   string
 	LastSyncTime time.Time
+	CreatedAt    time.Time
+	Deleted      bool
+}
+
+func FileConstructor(path string, hash string, size int64, modTime time.Time, isDir bool) *File {
+	return &File{
+		Path:    path,
+		Hash:    hash,
+		Size:    size,
+		ModTime: modTime,
+		IsDir:   isDir,
+	}
 }
