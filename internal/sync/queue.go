@@ -29,3 +29,11 @@ type SyncOp struct {
 	Retries   int
 	Error     error
 }
+
+func SyncOpConstructor(file *metadata.File, eventType fsnotify.Op) SyncOp {
+	return SyncOp{
+		File:      file,
+		EventType: eventType,
+		Status:    Pending,
+	}
+}
