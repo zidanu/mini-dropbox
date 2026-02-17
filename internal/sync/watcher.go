@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-func watch(ctx context.Context, filepath string, queue chan<- *SyncOp) error {
+func Watch(ctx context.Context, filepath string, queue chan<- *SyncOp) error {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return fmt.Errorf("failed to initialize file watching (func watch): %w", err)
