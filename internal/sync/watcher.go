@@ -10,6 +10,7 @@ import (
 	"os"
 	fp "path/filepath"
 	"strings"
+	"syscall"
 )
 
 func Watch(ctx context.Context, filepath string, queue chan<- *SyncOp, errs chan<- error) error {
@@ -62,8 +63,9 @@ func Watch(ctx context.Context, filepath string, queue chan<- *SyncOp, errs chan
 						errs <- fmt.Errorf("error occurred with hash.ComputeFileHash (func watch): %w", err)
 						continue
 					}
+					inode := pathInfo.Sys().(*syscall.Stat_t).Ino
 					if _, exists := fileMap[path]; !exists {
-						fileMap[path] = metadata.FileConstructor(path, hashCode, pathInfo.Size(), pathInfo.ModTime(), pathInfo.IsDir())
+						fileMap[path] = metadata.FileConstructor(path, hashCode, pathInfo.Size(), pathInfo.ModTime(), pathInfo.IsDir(), inode)
 					} else {
 						fileMap[path].ModTime = pathInfo.ModTime()
 						fileMap[path].Hash = hashCode
@@ -105,14 +107,20 @@ func Watch(ctx context.Context, filepath string, queue chan<- *SyncOp, errs chan
 						if removeErr := watcher.Remove(path); removeErr != nil {
 							errs <- fmt.Errorf("error occurred with watcher.Remove (func watch goroutine): %w", removeErr)
 						}
-						for dir := range watchedDirs {
-							if strings.HasPrefix(dir, path+string(os.PathSeparator)) {
-								watcher.Remove(dir)
-								delete(watchedDirs, dir)
+						if event.Has(fsnotify.Remove) {
+							for dir := range watchedDirs {
+								if strings.HasPrefix(dir, path+string(os.PathSeparator)) {
+									watcher.Remove(dir)
+									delete(watchedDirs, dir)
+								}
 							}
 						}
 					}
-					fileMap[path].Deleted = true
+					if event.Has(fsnotify.Remove) {
+						fileMap[path].Deleted = true
+					} else {
+						fileMap[path].Renamed = true
+					}
 					syncOp = SyncOpConstructor(fileMap[path], event.Op)
 					delete(fileMap, path)
 				}
