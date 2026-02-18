@@ -12,24 +12,22 @@ import (
 	"strings"
 )
 
-func Watch(ctx context.Context, filepath string, queue chan<- *SyncOp) error {
+func Watch(ctx context.Context, filepath string, queue chan<- *SyncOp, errs chan<- error) error {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return fmt.Errorf("failed to initialize file watching (func watch): %w", err)
 	}
 
-	errs := make(chan error, 5)
+	if addErr := watcher.Add(filepath); addErr != nil {
+		watcher.Close()
+		return addErr
+	}
 
 	go func() {
 		defer watcher.Close()
-		defer close(errs)
 		watchedDirs := make(map[string]bool)
 		fileMap := make(map[string]*metadata.File)
 
-		if addErr := watcher.Add(filepath); addErr != nil {
-			errs <- fmt.Errorf("error occurred with watcher.Add (func watch): %w", addErr)
-			return
-		}
 		watchedDirs[filepath] = true
 		if addSubErr := watchSubdirectory(filepath, watcher, &watchedDirs); addSubErr != nil {
 			errs <- addSubErr
@@ -97,7 +95,7 @@ func Watch(ctx context.Context, filepath string, queue chan<- *SyncOp) error {
 						continue
 					}
 					syncOp = SyncOpConstructor(fileMap[path], event.Op)
-				} else if event.Has(fsnotify.Remove) {
+				} else if event.Has(fsnotify.Remove) || event.Has(fsnotify.Rename) {
 					_, exists := fileMap[path]
 					if !exists {
 						// Come back to this when initial sync is implemented
@@ -116,8 +114,7 @@ func Watch(ctx context.Context, filepath string, queue chan<- *SyncOp) error {
 					}
 					fileMap[path].Deleted = true
 					syncOp = SyncOpConstructor(fileMap[path], event.Op)
-				} else if event.Has(fsnotify.Rename) {
-					continue
+					delete(fileMap, path)
 				}
 				queue <- &syncOp
 
@@ -130,11 +127,7 @@ func Watch(ctx context.Context, filepath string, queue chan<- *SyncOp) error {
 		}
 	}()
 
-	finErr, ok := <-errs
-	if !ok {
-		return nil
-	}
-	return finErr
+	return nil
 }
 
 func watchSubdirectory(root string, watcher *fsnotify.Watcher, watchedDirs *map[string]bool) error {
