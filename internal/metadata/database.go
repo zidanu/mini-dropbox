@@ -96,3 +96,18 @@ func (d *Database) GetFile(path string) (*File, error) {
 
 	return &file, nil
 }
+
+func (d *Database) UpdateFile(file *File) error {
+	query := `
+	UPDATE files
+	SET hash = ?, size = ?, mod_time = ?, version = version + 1, remote_hash = ?, last_sync_time = ?, deleted = ?
+	WHERE path = ?
+	`
+
+	_, err := d.db.Exec(query, file.Hash, file.Size, file.ModTime, file.Version, file.RemoteHash, file.LastSyncTime, file.Deleted, file.Path)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
