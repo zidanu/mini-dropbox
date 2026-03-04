@@ -64,7 +64,7 @@ func (d *Database) SaveFile(file *File) error {
 	return nil
 }
 
-func (d *Database) GetFile(id string) (*File, error) {
+func (d *Database) GetFile(path string) (*File, error) {
 	query := `
 	SELECT id, path, hash, size, mod_time, is_dir, version, remote_hash, last_sync_time, created_at, deleted
 	FROM files
@@ -73,7 +73,7 @@ func (d *Database) GetFile(id string) (*File, error) {
 
 	var file File
 
-	err := d.db.QueryRow(query, id).Scan(
+	err := d.db.QueryRow(query, path).Scan(
 		&file.ID,
 		&file.Path,
 		&file.Hash,
