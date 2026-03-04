@@ -16,7 +16,6 @@ type File struct {
 	LastSyncTime time.Time
 	CreatedAt    time.Time
 	Deleted      bool
-	Renamed      bool
 	Inode        uint64
 }
 
