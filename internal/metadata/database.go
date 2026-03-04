@@ -2,7 +2,7 @@ package metadata
 
 import (
 	"database/sql"
-	"github.com/mattn/go-sqlite3"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 type Database struct {
@@ -97,6 +97,11 @@ func (d *Database) GetFile(path string) (*File, error) {
 	return &file, nil
 }
 
+/*
+	 this function should be called only when:
+		file event has been processed and server has been updated
+		file deletion occured, set file.Deleted to true
+*/
 func (d *Database) UpdateFile(file *File) error {
 	query := `
 	UPDATE files
@@ -105,6 +110,20 @@ func (d *Database) UpdateFile(file *File) error {
 	`
 
 	_, err := d.db.Exec(query, file.Hash, file.Size, file.ModTime, file.Version, file.RemoteHash, file.LastSyncTime, file.Deleted, file.Path)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// only use this to clear up the metadata db when needed
+func (d *Database) DeleteFile(path string) error {
+	query := `
+	DELETE FROM files WHERE path = ?
+	`
+
+	_, err := d.db.Exec(query, path)
 	if err != nil {
 		return err
 	}
