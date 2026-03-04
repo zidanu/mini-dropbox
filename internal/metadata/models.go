@@ -1,12 +1,11 @@
 package metadata
 
 import (
-	"github.com/google/uuid"
 	"time"
 )
 
 type File struct {
-	ID           uuid.UUID
+	ID           string
 	Path         string
 	Hash         string
 	Size         int64
