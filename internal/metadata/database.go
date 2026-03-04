@@ -2,7 +2,6 @@ package metadata
 
 import (
 	"database/sql"
-	"github.com/google/uuid"
 	"github.com/mattn/go-sqlite3"
 )
 
@@ -65,18 +64,17 @@ func (d *Database) SaveFile(file *File) error {
 	return nil
 }
 
-func (d *Database) GetFile(path string) (*File, error) {
+func (d *Database) GetFile(id string) (*File, error) {
 	query := `
 	SELECT id, path, hash, size, mod_time, is_dir, version, remote_hash, last_sync_time, created_at, deleted
 	FROM files
-	WHERE path = ?
+	WHERE id = ?
 	`
 
 	var file File
-	var idStr string
 
-	err := d.db.QueryRow(query, path).Scan(
-		&idStr,
+	err := d.db.QueryRow(query, id).Scan(
+		&file.ID,
 		&file.Path,
 		&file.Hash,
 		&file.Size,
@@ -90,13 +88,8 @@ func (d *Database) GetFile(path string) (*File, error) {
 	)
 
 	if err == sql.ErrNoRows {
-		return nil, nil
+		return nil, sql.ErrNoRows
 	}
-	if err != nil {
-		return nil, err
-	}
-
-	file.ID, err = uuid.Parse(idStr)
 	if err != nil {
 		return nil, err
 	}
