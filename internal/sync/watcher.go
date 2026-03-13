@@ -13,7 +13,7 @@ import (
 	"syscall"
 )
 
-func Watch(ctx context.Context, filepath string, queue chan<- *SyncOp, errs chan<- error) error {
+func Watch(ctx context.Context, filepath string, database *metadata.Database, queue chan<- *SyncOp, errs chan<- error) error {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return fmt.Errorf("failed to initialize file watching (func watch): %w", err)
@@ -27,7 +27,7 @@ func Watch(ctx context.Context, filepath string, queue chan<- *SyncOp, errs chan
 	go func() {
 		defer watcher.Close()
 		watchedDirs := make(map[string]bool)
-		fileMap := make(map[string]*metadata.File)
+		// fileMap := make(map[string]*metadata.File)
 
 		watchedDirs[filepath] = true
 		if addSubErr := watchSubdirectory(filepath, watcher, &watchedDirs); addSubErr != nil {
@@ -48,6 +48,8 @@ func Watch(ctx context.Context, filepath string, queue chan<- *SyncOp, errs chan
 				path := event.Name
 
 				var pathInfo os.FileInfo
+				file, getFileErr := database.GetFile(path)
+
 				if !(event.Has(fsnotify.Remove) || event.Has(fsnotify.Rename)) {
 					pathInfo, err = os.Stat(path)
 					if err != nil {
@@ -64,22 +66,21 @@ func Watch(ctx context.Context, filepath string, queue chan<- *SyncOp, errs chan
 						continue
 					}
 					inode := pathInfo.Sys().(*syscall.Stat_t).Ino
-					if _, exists := fileMap[path]; !exists {
-						fileMap[path] = metadata.FileConstructor(path, hashCode, pathInfo.Size(), pathInfo.ModTime(), pathInfo.IsDir(), inode)
+					if getFileErr != nil {
+						database.SaveFile(metadata.FileConstructor(path, hashCode, pathInfo.Size(), pathInfo.ModTime(), pathInfo.IsDir(), inode))
 					} else {
-						fileMap[path].ModTime = pathInfo.ModTime()
-						fileMap[path].Hash = hashCode
-						fileMap[path].Size = pathInfo.Size()
+						file.ModTime = pathInfo.ModTime()
+						file.Hash = hashCode
+						file.Size = pathInfo.Size()
 					}
 				}
 
 				var syncOp SyncOp
 				if event.Has(fsnotify.Create) {
-					_, exists := fileMap[path]
-					if !exists {
+					if getFileErr != nil {
 						continue
 					}
-					if fileMap[path].IsDir {
+					if file.IsDir {
 						if addErr := watcher.Add(path); addErr != nil {
 							errs <- fmt.Errorf("error occurred with watcher.Add (func watch goroutine): %w", addErr)
 							continue
@@ -89,21 +90,19 @@ func Watch(ctx context.Context, filepath string, queue chan<- *SyncOp, errs chan
 							errs <- addSubErr
 						}
 					}
-					fileMap[path].CreatedAt = fileMap[path].ModTime
-					syncOp = SyncOpConstructor(fileMap[path], event.Op)
+					file.CreatedAt = file.ModTime
+					syncOp = SyncOpConstructor(file, event.Op)
 				} else if event.Has(fsnotify.Write) {
-					_, exists := fileMap[path]
-					if !exists {
+					if getFileErr != nil {
 						continue
 					}
-					syncOp = SyncOpConstructor(fileMap[path], event.Op)
+					syncOp = SyncOpConstructor(file, event.Op)
 				} else if event.Has(fsnotify.Remove) || event.Has(fsnotify.Rename) {
-					_, exists := fileMap[path]
-					if !exists {
+					if getFileErr != nil {
 						// Come back to this when initial sync is implemented
 						continue
 					}
-					if fileMap[path].IsDir {
+					if file.IsDir {
 						if removeErr := watcher.Remove(path); removeErr != nil {
 							errs <- fmt.Errorf("error occurred with watcher.Remove (func watch goroutine): %w", removeErr)
 						}
@@ -117,12 +116,9 @@ func Watch(ctx context.Context, filepath string, queue chan<- *SyncOp, errs chan
 						}
 					}
 					if event.Has(fsnotify.Remove) {
-						fileMap[path].Deleted = true
-					} else {
-						fileMap[path].Renamed = true
+						file.Deleted = true
 					}
-					syncOp = SyncOpConstructor(fileMap[path], event.Op)
-					delete(fileMap, path)
+					syncOp = SyncOpConstructor(file, event.Op)
 				}
 				queue <- &syncOp
 
