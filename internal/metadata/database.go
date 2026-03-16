@@ -16,16 +16,16 @@ func NewDatabase(filepath string) (*Database, error) {
 	}
 	database := &Database{db: sqlDB}
 
-	if err := database.initTables(); err != nil {
+	if err := database.InitTables(); err != nil {
 		return nil, err
 	}
 
 	return database, nil
 }
 
-func (d *Database) initTables() error {
+func (d *Database) InitTables() error {
 	query := `
-	CREATE TABLES IF NOT EXISTS files (
+	CREATE TABLE IF NOT EXISTS files (
 		id TEXT PRIMARY KEY,
 		path TEXT NOT NULL UNIQUE,
 		hash TEXT NOT NULL,
@@ -57,7 +57,7 @@ func (d *Database) SaveFile(file *File) error {
 	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
-	_, err := d.db.Exec(query)
+	_, err := d.db.Exec(query, file.ID, file.Path, file.Hash, file.Size, file.ModTime, file.IsDir, file.Version, file.RemoteHash, file.LastSyncTime, file.CreatedAt, file.Deleted)
 	if err != nil {
 		return err
 	}
@@ -68,7 +68,7 @@ func (d *Database) GetFile(path string) (*File, error) {
 	query := `
 	SELECT id, path, hash, size, mod_time, is_dir, version, remote_hash, last_sync_time, created_at, deleted
 	FROM files
-	WHERE id = ?
+	WHERE path = ?
 	`
 
 	var file File
