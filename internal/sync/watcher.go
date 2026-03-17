@@ -48,7 +48,7 @@ func Watch(ctx context.Context, filepath string, database *metadata.Database, qu
 				path := event.Name
 
 				var pathInfo os.FileInfo
-				file, getFileErr := database.GetFile(path)
+				file, getFileErr := database.GetFileByPath(path)
 
 				if !(event.Has(fsnotify.Remove) || event.Has(fsnotify.Rename)) {
 					pathInfo, err = os.Stat(path)
@@ -60,14 +60,24 @@ func Watch(ctx context.Context, filepath string, database *metadata.Database, qu
 						errs <- fmt.Errorf("error occurred with os.Stat (func watch): %w", err)
 						continue
 					}
-					hashCode, err := hash.ComputeFileHash(path)
-					if err != nil {
-						errs <- fmt.Errorf("error occurred with hash.ComputeFileHash (func watch): %w", err)
-						continue
-					}
-					inode := pathInfo.Sys().(*syscall.Stat_t).Ino
+					hashCode := ""
 					if getFileErr != nil {
-						database.SaveFile(metadata.FileConstructor(path, hashCode, pathInfo.Size(), pathInfo.ModTime(), pathInfo.IsDir(), inode))
+						err = nil
+						if !pathInfo.IsDir() {
+							hashCode, err = hash.ComputeFileHash(path)
+						}
+						if err != nil {
+							errs <- fmt.Errorf("error occurred with hash.ComputeFileHash (func watch): %w", err)
+							continue
+						}
+						inode := pathInfo.Sys().(*syscall.Stat_t).Ino
+						newFile := metadata.FileConstructor(path, hashCode, pathInfo.Size(), pathInfo.ModTime(), pathInfo.IsDir(), inode)
+						if saveErr := database.SaveFile(newFile); saveErr != nil {
+							errs <- fmt.Errorf("failed to save: %w", saveErr)
+							continue
+						}
+						file = newFile
+						getFileErr = nil
 					} else {
 						file.ModTime = pathInfo.ModTime()
 						file.Hash = hashCode
@@ -77,9 +87,6 @@ func Watch(ctx context.Context, filepath string, database *metadata.Database, qu
 
 				var syncOp SyncOp
 				if event.Has(fsnotify.Create) {
-					if getFileErr != nil {
-						continue
-					}
 					if file.IsDir {
 						if addErr := watcher.Add(path); addErr != nil {
 							errs <- fmt.Errorf("error occurred with watcher.Add (func watch goroutine): %w", addErr)
@@ -93,9 +100,6 @@ func Watch(ctx context.Context, filepath string, database *metadata.Database, qu
 					file.CreatedAt = file.ModTime
 					syncOp = SyncOpConstructor(file, event.Op)
 				} else if event.Has(fsnotify.Write) {
-					if getFileErr != nil {
-						continue
-					}
 					syncOp = SyncOpConstructor(file, event.Op)
 				} else if event.Has(fsnotify.Remove) || event.Has(fsnotify.Rename) {
 					if getFileErr != nil {
