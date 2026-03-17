@@ -16,17 +16,17 @@ func NewDatabase(filepath string) (*Database, error) {
 	}
 	database := &Database{db: sqlDB}
 
-	if err := database.InitTables(); err != nil {
+	if err := database.InitTable(); err != nil {
 		return nil, err
 	}
 
 	return database, nil
 }
 
-func (d *Database) InitTables() error {
+func (d *Database) InitTable() error {
 	query := `
 	CREATE TABLE IF NOT EXISTS files (
-		id TEXT PRIMARY KEY,
+		db_id INTEGER PRIMARY KEY AUTOINCREMENT,
 		path TEXT NOT NULL UNIQUE,
 		hash TEXT NOT NULL,
 		size INTEGER NOT NULL,
@@ -36,7 +36,8 @@ func (d *Database) InitTables() error {
 		remote_hash TEXT,
 		last_sync_time DATETIME,
 		created_at DATETIME,
-		deleted BOOLEAN DEFAULT 0
+		deleted BOOLEAN DEFAULT 0,
+		inode INTEGER NOT NULL
 	);
 
 	CREATE INDEX IF NOT EXISTS idx_path ON files(path);
@@ -53,20 +54,20 @@ func (d *Database) InitTables() error {
 func (d *Database) SaveFile(file *File) error {
 	query := `
 	INSERT INTO files (
-		id, path, hash, size, mod_time, is_dir, version, remote_hash, last_sync_time, created_at, deleted
+		path, hash, size, mod_time, is_dir, version, remote_hash, last_sync_time, created_at, deleted, inode
 	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
-	_, err := d.db.Exec(query, file.ID, file.Path, file.Hash, file.Size, file.ModTime, file.IsDir, file.Version, file.RemoteHash, file.LastSyncTime, file.CreatedAt, file.Deleted)
+	_, err := d.db.Exec(query, file.Path, file.Hash, file.Size, file.ModTime, file.IsDir, file.Version, file.RemoteHash, file.LastSyncTime, file.CreatedAt, file.Deleted, file.Inode)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (d *Database) GetFile(path string) (*File, error) {
+func (d *Database) GetFileByPath(path string) (*File, error) {
 	query := `
-	SELECT id, path, hash, size, mod_time, is_dir, version, remote_hash, last_sync_time, created_at, deleted
+	SELECT path, hash, size, mod_time, is_dir, version, remote_hash, last_sync_time, created_at, deleted, inode
 	FROM files
 	WHERE path = ?
 	`
@@ -74,7 +75,6 @@ func (d *Database) GetFile(path string) (*File, error) {
 	var file File
 
 	err := d.db.QueryRow(query, path).Scan(
-		&file.ID,
 		&file.Path,
 		&file.Hash,
 		&file.Size,
@@ -85,6 +85,7 @@ func (d *Database) GetFile(path string) (*File, error) {
 		&file.LastSyncTime,
 		&file.CreatedAt,
 		&file.Deleted,
+		&file.Inode,
 	)
 
 	if err == sql.ErrNoRows {
