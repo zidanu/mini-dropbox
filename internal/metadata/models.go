@@ -5,7 +5,6 @@ import (
 )
 
 type File struct {
-	ID           string
 	Path         string
 	Hash         string
 	Size         int64
